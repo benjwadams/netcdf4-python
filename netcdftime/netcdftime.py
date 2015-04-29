@@ -13,9 +13,10 @@ except ImportError:  # python 3.x
 
 from ._datetime import datetime
 
-_units = ['days', 'hours', 'minutes', 'seconds',
-          'day', 'hour', 'minute', 'second',
-          'milliseconds','millisecond','microseconds','microsecond']
+_plural_units = ['day', 'hour', 'hr', 'minute', 'min', 'second', 'sec',
+                 'millisecond', 'microsecond']
+_singular_units = ['d', 'h', 's']
+
 _calendars = ['standard', 'gregorian', 'proleptic_gregorian',
               'noleap', 'julian', 'all_leap', '365_day', '366_day', '360_day']
 
@@ -495,17 +496,27 @@ def _dateparse(timestr):
     """parse a string of the form time-units since yyyy-mm-dd hh:mm:ss
     return a tuple (units,utc_offset, datetimeinstance)"""
     timestr_split = timestr.split()
-    units = timestr_split[0].lower()
-    if units not in _units:
+    l_units = timestr_split[0].lower()
+    # try to find the
+    sing_form = l_units[:-1] if l_units.endswith('s') else l_units
+    if sing_form in _plural_units:
+        s_units = sing_form
+    elif l_units in _singular_units:
+        s_units = l_units
+    else:
+        s_units = l_units
+        plural_forms = ["'{}{}'".format(f, s) for f in _plural_units
+                                              for s in ('', 's')]
+        possible_units = ', '.join(sorted(plural_forms + _singular_units))
         raise ValueError(
-            "units must be one of 'seconds', 'minutes', 'hours' or 'days' (or singular version of these), got '%s'" % units)
+            "units must be one of {}, got '{}'".format(possible_units, l_units))
     if timestr_split[1].lower() != 'since':
         raise ValueError("no 'since' in unit_string")
     # parse the date string.
     n = timestr.find('since') + 6
     year, month, day, hour, minute, second, utc_offset = _parse_date(
         timestr[n:].strip())
-    return units, utc_offset, datetime(year, month, day, hour, minute, second)
+    return l_units, s_units, utc_offset, datetime(year, month, day, hour, minute, second)
 
 
 class utime:
@@ -650,9 +661,10 @@ units to datetime objects.
         else:
             raise ValueError(
                 "calendar must be one of %s, got '%s'" % (str(_calendars), calendar))
-        units, tzoffset, self.origin = _dateparse(unit_string)
+        units, s_units, tzoffset, self.origin = _dateparse(unit_string)
         self.tzoffset = tzoffset  # time zone offset in minutes
         self.units = units
+        self.s_units = s_units
         self.unit_string = unit_string
         if self.calendar in ['noleap', '365_day'] and self.origin.month == 2 and self.origin.day == 29:
             raise ValueError(
@@ -736,17 +748,17 @@ units to datetime objects.
         if not isscalar:
             jdelta = numpy.array(jdelta)
         # convert to desired units, subtract time zone offset.
-        if self.units in ['microseconds','microsecond']:
+        if self.s_units == 'microsecond':
             jdelta = jdelta * 86400. * 1.e6  - self.tzoffset * 60. * 1.e6
-        elif self.units in ['milliseconds', 'millisecond']:
+        elif self.s_units == 'millisecond':
             jdelta = jdelta * 86400. * 1.e3  - self.tzoffset * 60. * 1.e3
-        elif self.units in ['second', 'seconds']:
+        elif self.s_units in ['second', 'sec', 's']:
             jdelta = jdelta * 86400. - self.tzoffset * 60.
-        elif self.units in ['minute', 'minutes']:
+        elif self.s_units in ['minute', 'min']:
             jdelta = jdelta * 1440. - self.tzoffset
-        elif self.units in ['hour', 'hours']:
+        elif self.s_units in ['hour', 'hr', 'h']:
             jdelta = jdelta * 24. - self.tzoffset / 60.
-        elif self.units in ['day', 'days']:
+        elif self.s_units in ['day', 'd']:
             jdelta = jdelta - self.tzoffset / 1440.
         if isscalar:
             return jdelta
@@ -788,20 +800,21 @@ units to datetime objects.
             time_value = numpy.array(time_value, dtype='d')
             shape = time_value.shape
         # convert to desired units, add time zone offset.
-        if self.units in ['microseconds','microsecond']:
+        if self.s_units == 'microsecond':
             jdelta = time_value / 86400000000. + self.tzoffset / 1440.
-        elif self.units in ['milliseconds', 'millisecond']:
+        elif self.s_units == 'millisecond':
             jdelta = time_value / 86400000. + self.tzoffset / 1440.
-        elif self.units in ['second', 'seconds']:
+        elif self.s_units in ['second', 'sec', 's']:
             jdelta = time_value / 86400. + self.tzoffset / 1440.
-        elif self.units in ['minute', 'minutes']:
+        elif self.s_units in ['minute', 'min']:
             jdelta = time_value / 1440. + self.tzoffset / 1440.
-        elif self.units in ['hour', 'hours']:
+        elif self.s_units in ['hour', 'hr', 'h']:
             jdelta = time_value / 24. + self.tzoffset / 1440.
-        elif self.units in ['day', 'days']:
+        elif self.s_units in ['day', 'd']:
             jdelta = time_value + self.tzoffset / 1440.
         jd = self._jd0 + jdelta
-        if self.calendar in ['julian', 'standard', 'gregorian', 'proleptic_gregorian']:
+        if self.calendar in ['julian', 'standard', 'gregorian',
+                             'proleptic_gregorian']:
             if not isscalar:
                 if ismasked:
                     date = []

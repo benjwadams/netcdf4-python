@@ -41,7 +41,17 @@ class netcdftimeTestCase(unittest.TestCase):
         """testing netcdftime"""
         # test mixed julian/gregorian calendar
         # check attributes.
+
+        # check that some abbreviated time unit forms work and are the same
+        # as their non-abbreviated counterparts
         self.assertTrue(self.cdftime_mixed.units == 'hours')
+        for full, abbrev in [('seconds', 's'),
+                             ('minutes', 'min'),
+                             ('hour', 'hr'),
+                             ('days', 'd')]:
+            d1 = num2date(0, '{} since 1000-01-01'.format(full), 'standard')
+            d2 = num2date(0, '{} since 1000-01-01'.format(abbrev), 'standard')
+            assert d1 == d2
         self.assertTrue(
             repr(self.cdftime_mixed.origin) == '   1-01-01 00:00:00')
         self.assertTrue(

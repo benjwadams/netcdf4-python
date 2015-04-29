@@ -10,6 +10,7 @@ def _dateparse(timestr):
     # same as version in netcdftime, but returns a timezone naive
     # python datetime instance with the utc_offset included.
     timestr_split = timestr.split()
+    # units possibly unused here?
     units = timestr_split[0].lower()
     if timestr_split[1].lower() != 'since':
         raise ValueError("no 'since' in unit_string")
@@ -118,7 +119,7 @@ Default is C{'standard'}, which is a mixed Julian/Gregorian calendar.
 @return: a numeric time value, or an array of numeric time values.
     """
     basedate = _dateparse(units)
-    unit = units.split()[0].lower()
+    unit = _parse_time_units(units.split()[0].lower())
 
     if (calendar == 'proleptic_gregorian' and basedate.year >= MINYEAR) or \
        (calendar in ['gregorian','standard'] and basedate > gregorian):
@@ -145,17 +146,17 @@ Default is C{'standard'}, which is a mixed Julian/Gregorian calendar.
                 td = date - basedate
                 # total time in microseconds.
                 totaltime = td.microseconds + (td.seconds + td.days * 24 * 3600) * 1.e6
-                if unit == 'microseconds' or unit == 'microsecond':
+                if unit == 'microsecond':
                     times.append(totaltime)
-                elif unit == 'milliseconds' or unit == 'millisecond':
+                elif unit == 'millisecond':
                     times.append(totaltime/1.e3)
-                elif unit == 'seconds' or unit == 'second':
+                elif unit in ['second', 'sec', 's']:
                     times.append(totaltime/1.e6)
-                elif unit == 'minutes' or unit == 'minute':
+                elif unit in ['minute', 'min']:
                     times.append(totaltime/1.e6/60)
-                elif unit == 'hours' or unit == 'hour':
+                elif unit in ['hour', 'hr', 'h']:
                     times.append(totaltime/1.e6/3600)
-                elif unit == 'days' or unit == 'day':
+                elif unit in ['day', 'd']:
                     times.append(totaltime/1.e6/3600./24.)
         if isscalar:
             return times[0]
@@ -164,6 +165,25 @@ Default is C{'standard'}, which is a mixed Julian/Gregorian calendar.
     else: # use netcdftime module for other calendars
         cdftime = netcdftime.utime(units,calendar=calendar)
         return cdftime.date2num(dates)
+
+def _parse_time_units(l_units):
+    """parses lowercased udunits-like time units"""
+    plural_units = ['day', 'hour', 'hr', 'minute', 'min', 'second', 'sec',
+                    'millisecond', 'microsecond']
+    singular_units = ['d', 'h', 's']
+    sing_form = l_units[:-1] if l_units.endswith('s') else l_units
+    if sing_form in plural_units:
+        units = sing_form
+    elif l_units in singular_units:
+        units = l_units
+    else:
+        units = l_units
+        plural_forms = ["'{}{}'".format(f, s) for f in _plural_units
+                                              for s in ('', 's')]
+        possible_units = ', '.join(sorted(plural_forms + _singular_units))
+        raise ValueError(
+            "units must be one of {}, got '{}'".format(possible_units, units))
+    return units
 
 def num2date(times,units,calendar='standard'):
     """
@@ -204,7 +224,7 @@ contains one.
     """
     calendar = calendar.lower()
     basedate = _dateparse(units)
-    unit = units.split()[0].lower()
+    unit = _parse_time_units(units.split()[0].lower())
 
     if (calendar == 'proleptic_gregorian' and basedate.year >= MINYEAR) or \
        (calendar in ['gregorian','standard'] and basedate > gregorian):
@@ -220,6 +240,7 @@ contains one.
             times = numpy.array(times, dtype='d')
             shape = times.shape
         ismasked = False
+        import sys; sys.exit()
         if hasattr(times,'mask'):
             mask = times.mask
             ismasked = True
@@ -229,17 +250,17 @@ contains one.
                 dates.append(None)
             else:
                 # convert to total seconds
-                if unit == 'microseconds' or unit == 'microsecond':
+                if unit == 'microsecond':
                     tsecs = time/1.e6
-                elif unit == 'milliseconds' or unit == 'millisecond':
+                elif unit == 'millisecond':
                     tsecs = time/1.e3
-                elif unit == 'seconds' or unit == 'second':
+                elif unit in ['second', 'sec', 's']:
                     tsecs = time
-                elif unit == 'minutes' or unit == 'minute':
+                elif unit in ['minute', 'min']:
                     tsecs = time*60.
-                elif unit == 'hours' or unit == 'hour':
+                elif unit in ['hour', 'hr', 'h']:
                     tsecs = time*3600.
-                elif unit == 'days' or unit == 'day':
+                elif unit in ['day', 'd']:
                     tsecs = time*86400.
                 # compute time delta.
                 days = tsecs // 86400.
@@ -723,7 +744,7 @@ class _Variable(object):
 
         # if no masked elements, return numpy array.
         if ma.isMA(data) and not data.mask.any():
-            data = data.filled()
+           data = data.filled()
 
         return data
 
